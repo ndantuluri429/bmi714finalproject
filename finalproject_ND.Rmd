@@ -1,0 +1,256 @@
+---
+title: "BMI 714 Final Project!"
+author: "Neha Dantuluri"
+date: "December 16, 2024"
+output:
+  html_document: 
+toc: true
+toc_depth: 3
+toc_float: true
+pdf_document: default
+---
+
+```{r}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::knit_engines$set(txt = function(options) {
+  code <- paste(options$code, collapse = "\n")
+  knitr::engine_output(options, code, NULL)
+  })
+```
+
+
+## 1: Exploratory Analysis and QC of Data
+
+1.1 Data Transformation + Assessing/removing/imputing missing values
+
+```{r}
+library(tidyverse)
+library(haven)
+
+demographics_data <- read_xpt("/Users/nehadantuluri/Downloads/P_DEMO.XPT")
+depression_data <- read_xpt("/Users/nehadantuluri/Downloads/P_DPQ.XPT")
+occupation_data <- read_xpt("/Users/nehadantuluri/Downloads/P_OCQ.XPT")
+health_insurance_data <- read_xpt("/Users/nehadantuluri/Downloads/P_HIQ.XPT")
+hospital_use_data <- read_xpt("/Users/nehadantuluri/Downloads/P_HUQ.XPT")
+food_security_data <- read_xpt("/Users/nehadantuluri/Downloads/P_FSQ.XPT")
+
+nhanes_data <- reduce(list(demographics_data, depression_data, occupation_data, health_insurance_data, hospital_use_data, food_security_data), 
+                      merge, by = "SEQN", all = TRUE)
+
+selected_nhanes_variables <- nhanes_data %>%
+  select(SEQN, DPQ010, RIAGENDR, RIDAGEYR, RIDRETH3, DMDMARTZ, DMDEDUC2, INDFMPIR, OCD150, HIQ011, HUQ090, FSDAD) %>%
+  rename(
+    respondent_ID = SEQN,
+    depression_score = DPQ010,
+    gender = RIAGENDR,
+    age = RIDAGEYR,
+    race_ethnicity = RIDRETH3,
+    marital_status = DMDMARTZ,
+    education_level = DMDEDUC2,
+    income2poverty_ratio = INDFMPIR,
+    employment_measures = OCD150,
+    health_insurance = HIQ011,
+    mental_health_seen = HUQ090,
+    food_security_status = FSDAD) %>% 
+  filter(
+    age >= 20 & age <= 49,                 
+    gender == 2,                            
+    depression_score %in% c(0,1,2,3),      
+    race_ethnicity  %in% c(1,2,3,4,6,7),    
+    marital_status %in% c(1,2,3),          
+    education_level  %in% c(1,2,3,4,5),   
+    income2poverty_ratio <= 4.98,          
+    health_insurance %in% c(1,2),         
+    mental_health_seen %in% c(1,2),        
+    employment_measures %in% c(1,2,3,4),      
+    food_security_status %in% c(1,2,3,4)) %>% 
+  mutate(
+     employment_status= case_when(
+      employment_measures %in% c(1, 2) ~ "Employed", 
+      employment_measures == 3 ~ "Looking for work",
+      employment_measures == 4 ~ "Not working"))
+
+write.csv(selected_nhanes_variables, "/Users/nehadantuluri/Downloads/nhanes_selected_data.csv", row.names = FALSE)
+nhanes_clean <- read.csv("/Users/nehadantuluri/Downloads/nhanes_selected_data.csv")
+head(nhanes_clean)
+```
+
+1.2 Plots showing relationship between variables of interest. 
+```{r}
+library(ggplot2)
+
+# categorical variable x numeric variable plots
+ggplot(nhanes_clean, aes(x = factor(depression_score), y = age)) +
+  geom_jitter(width = 0.2, alpha = 0.5) +
+  labs(title = "Age vs. Depression Score (Jittered)", x = "Depression Score", y = "Age") +
+  theme_minimal()
+
+ggplot(nhanes_clean, aes(x = factor(depression_score), y = income2poverty_ratio)) +
+  geom_jitter(width = 0.2, alpha = 0.5) +
+  labs(title = "Income-to-Poverty Ratio vs. Depression Score (Jittered)", x = "Income-to-Poverty Ratio", y = "Age") +
+  theme_minimal()
+
+# categorical variable x categorical variable plots
+ggplot(data = nhanes_clean, aes(x = factor(depression_score), fill = factor(race_ethnicity))) +
+  geom_bar(position = "fill") + 
+  labs(title = "Proportion of Race/Ethnicity Across Depression Severity", x = "Depression Score", y = "Proportion", fill = "Race/Ethnicity") +
+  theme_minimal()
+
+ggplot(data = nhanes_clean, aes(x = factor(depression_score), fill = factor(marital_status))) +
+  geom_bar(position = "fill") + 
+  labs(title = "Proportion of Marital Status Across Depression Severity", x = "Depression Score", y = "Proportion", fill = "Marital Status") +
+  theme_minimal()
+
+ggplot(data = nhanes_clean, aes(x = factor(depression_score), fill = factor(education_level))) +
+  geom_bar(position = "fill") + 
+  labs(title = "Proportion of Education Level Across Depression Severity", x = "Depression Score", y = "Proportion", fill = "Education Level") +
+  theme_minimal()
+
+ggplot(data = nhanes_clean, aes(x = factor(depression_score), fill = factor(employment_status))) +
+  geom_bar(position = "fill") + 
+  labs(title = "Proportion of Employment Status Across Depression Severity", x = "Depression Score", y = "Proportion", fill = "Employment Status") +
+  theme_minimal()
+
+ggplot(data = nhanes_clean, aes(x = factor(depression_score), fill = factor(health_insurance))) +
+  geom_bar(position = "fill") + 
+  labs(title = "Proportion of Health Insurance Status Across Depression Severity", x = "Depression Score", y = "Proportion", fill = "Health Insurance Status") +
+  theme_minimal()
+
+ggplot(data = nhanes_clean, aes(x = factor(depression_score), fill = factor(mental_health_seen))) +
+  geom_bar(position = "fill") + 
+  labs(title = "Proportion of Seen by Mental Health Professional Across Depression Severity", x = "Depression Score", y = "Proportion", fill = "Seen by a Mental Health Professional") +
+  theme_minimal()
+
+ggplot(data = nhanes_clean, aes(x = factor(depression_score), fill = factor(food_security_status))) +
+  geom_bar(position = "fill") + 
+  labs(title = "Proportion of Food Security Status Across Depression Severity", x = "Depression Score", y = "Proportion", fill = "Food Security Status") +
+  theme_minimal()
+
+
+# used this resource for ggplot2: https://ggplot2.tidyverse.org/reference/theme.html 
+# used this resource for geom_jitter: https://thomasleeper.com/Rcourse/Tutorials/jitter.html 
+```
+
+1.3 Check correlations/collinearity
+```{r}
+cor(nhanes_clean$depression_score, nhanes_clean$age, method = "spearman") # value is close to 0, no significant correlation
+cor(nhanes_clean$depression_score, nhanes_clean$income2poverty_ratio, method = "spearman") # weak negative correlation, higher income may may slightly influence lower depression scores 
+cor(nhanes_clean$depression_score, nhanes_clean$race_ethnicity, method = "spearman") # value is close to 0, no significant correlation
+cor(nhanes_clean$depression_score, nhanes_clean$marital_status, method = "spearman") # value is close to 0, no significant correlation 
+cor(nhanes_clean$depression_score, nhanes_clean$education_level, method = "spearman") # value is close to 0, no significant correlation 
+cor(nhanes_clean$depression_score, nhanes_clean$employment_status, method = "spearman") # weak positive correlation, employment status may slightly influence depression scores
+cor(nhanes_clean$depression_score, nhanes_clean$health_insurance, method = "spearman") # value is close to 0, no significant correlation 
+cor(nhanes_clean$depression_score, nhanes_clean$mental_health_seen, method = "spearman") # weak negative correlation, more mental_health_seen may slightly influence lower depression scores
+cor(nhanes_clean$depression_score, nhanes_clean$food_security_status, method = "spearman") # weak positive correlation, food security status may slightly influence depression scores
+```
+
+1.4 Scale predictors as needed
+```{r}
+nhanes_clean <- nhanes_clean %>%
+  mutate(
+    age_scaled = scale(age),
+    income2poverty_ratio_scaled = scale(income2poverty_ratio))
+```
+
+
+1.5 Code categorical variables appropriately
+```{r}
+nhanes_clean <- nhanes_clean %>%
+  mutate(
+    depression_score = factor(depression_score, levels = c(0, 1, 2, 3), 
+                              labels = c("Not Difficult", "Somewhat Difficult", "Very Difficult", "Extremely Difficult")),
+    gender = factor(gender, levels = c(1, 2), labels = c("Male", "Female")),
+    race_ethnicity = factor(race_ethnicity, levels = c(1, 2, 3, 4, 6, 7), 
+                            labels = c("Mexican American", "Other Hispanic", "Non-Hispanic White", 
+                                       "Non-Hispanic Black", "Non-Hispanic Asian", "Other/Multi-Racial")),
+    marital_status = factor(marital_status, levels = c(1, 2, 3), 
+                            labels = c("Married/Living with Partner", "Widowed/Divorced/Separated", "Never Married")),
+    education_level = factor(education_level, levels = c(1, 2, 3, 4, 5), 
+                             labels = c("Less than 9th Grade", "9-11th Grade", "High School Graduate", 
+                                        "Some College/AA Degree", "College Graduate or Above")),
+    health_insurance = factor(health_insurance, levels = c(1, 2), labels = c("Yes", "No")),
+    mental_health_seen = factor(mental_health_seen, levels = c(1, 2), labels = c("Yes", "No")),
+    food_security_status = factor(food_security_status, levels = c(1, 2, 3, 4), 
+                                  labels = c("Full Food Security", "Marginal Food Security", 
+                                             "Low Food Security", "Very Low Food Security"))
+  )
+```
+
+
+
+## 2: CHOOSE A REGRESSION OR CLASSIFICATION MODEL
+
+2.1 Choose Model, Evaluate Assumptions, & Justify Decisions
+
+
+## 3: RUN THE MODEL
+
+```{r}
+library(MASS)
+```
+
+3.1 Run initial model
+
+```{r}
+# ordinal logistic regression
+model <- polr(depression_score ~ income2poverty_ratio + employment_status + 
+                     marital_status + health_insurance + mental_health_seen + 
+                     education_level + race_ethnicity +
+                     food_security_status, data = nhanes_clean, method = "logistic")
+summary(model)
+```
+
+3.2 Variable Selection
+
+```{r}
+# Stepwise Variable Selection (AIC)
+selected_model <- stepAIC(model, direction = "both", trace = TRUE)
+summary(selected_model)
+```
+
+3.3 Run model (based on variable selection)
+
+```{r}
+model_2 <- polr(depression_score ~  income2poverty_ratio + health_insurance + 
+                mental_health_seen + food_security_status, 
+                data = nhanes_clean, method = "logistic")
+summary(model_2)
+```
+
+
+## 4: EVALUATE MODEL FIT
+4.1 Choose, calculate, and appropriately interpret a metric 
+4.2 Justify the metric you chose based on the goal of your model
+
+## 5: COMPARE YOUR MODEL TO ONE WITH DIFFERENT VARIABLES
+5.1 Justify alternate model chosen
+
+5.2 Run alternate model
+```{r}
+alternate_model <- polr(depression_score ~ income2poverty_ratio + marital_status +  
+                          education_level + race_ethnicity + food_security_status,
+                     data = nhanes_clean, method = "logistic")
+```
+
+5.3 Calculate a metric to compare models
+
+```{r}
+anova(model_2, alternate_model, test = "Chisq")
+```
+
+
+## 6: CONDUCT ONE FOLLOW UP ANALYSIS
+
+6.1 Choose an analysis which fits with the over goal of your model
+
+```{r}
+followup_model <- polr(depression_score ~ income2poverty_ratio + food_security_status + marital_status + education_level, 
+                        data = nhanes_clean[nhanes_clean$age >= 20 & nhanes_clean$age <= 34,], method = "logistic")
+summary(followup_model)
+```
+
+
+6.2 Appropriately interpret the results
+
+
+
